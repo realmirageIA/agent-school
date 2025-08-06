@@ -1,0 +1,265 @@
+{
+  "name": "AgentSchoolv1.0.0",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-webhook"
+      },
+      "id": "Webhook_WhatsApp",
+      "name": "Webhook WhatsApp",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"message\"]}}",
+              "operation": "equal",
+              "value2": "Marte"
+            }
+          ]
+        }
+      },
+      "id": "Filter_Marte",
+      "name": "Filter Marte",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "students",
+        "columns": [
+          "id",
+          "name",
+          "phone_number",
+          "level"
+        ],
+        "filters": [
+          {
+            "column": "phone_number",
+            "operator": "equal",
+            "value": "={{$json[\"from\"]}}"
+          }
+        ]
+      },
+      "id": "Supabase_GetStudent",
+      "name": "Supabase Get Student",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        700,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "questions",
+        "columns": [
+          "id",
+          "question_text",
+          "options",
+          "correct_answer",
+          "difficulty"
+        ],
+        "filters": [
+          {
+            "column": "difficulty",
+            "operator": "equal",
+            "value": "={{$json[\"level\"]}}"
+          }
+        ],
+        "limit": 1,
+        "orderBy": [
+          {
+            "column": "created_at",
+            "direction": "ASC"
+          }
+        ]
+      },
+      "id": "Supabase_GetQuestion",
+      "name": "Supabase Get Question",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        950,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "cronExpression": "0 8,12,19 * * *"
+      },
+      "id": "Cron_SendQuestions",
+      "name": "Cron Send Questions",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 2,
+      "position": [
+        200,
+        50
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [\n  {\n    json: {\n      question_id: $json[\"id\"],\n      question_text: $json[\"question_text\"],\n      options: $json[\"options\"]\n    }\n  }\n];"
+      },
+      "id": "Prepare_Question",
+      "name": "Prepare Question",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const answer = $json[\"message\"]?.trim().toLowerCase();\nconst correct = $json[\"correct_answer\"].trim().toLowerCase();\nconst isCorrect = answer === correct;\nreturn [{json: {\n  student_id: $('Supabase Get Student').item.json.id,\n  question_id: $('Supabase Get Question').item.json.id,\n  answer_text: answer,\n  is_correct: isCorrect,\n  score: isCorrect ? 10 : 0\n}}];"
+      },
+      "id": "Function_CheckAnswer",
+      "name": "Function Check Answer",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        450,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "answers",
+        "columns": [
+          "student_id",
+          "question_id",
+          "answer_text",
+          "is_correct",
+          "score"
+        ],
+        "values": "={{$json}}"
+      },
+      "id": "Supabase_SaveAnswer",
+      "name": "Supabase Save Answer",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        700,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "chat",
+        "chatInput": "={{$json[\"answer_text\"]}}",
+        "systemMessage": "Você é um professor de inglês. Corrija a resposta do aluno e dê feedback motivador com a nota: {{ $json[\"score\"] }} pontos."
+      },
+      "id": "AI_Feedback",
+      "name": "AI Feedback",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 2,
+      "position": [
+        950,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Filter Marte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Marte": {
+      "main": [
+        [
+          {
+            "node": "Supabase Get Student",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Get Student": {
+      "main": [
+        [
+          {
+            "node": "Supabase Get Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Get Question": {
+      "main": [
+        [
+          {
+            "node": "Prepare Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Question": {
+      "main": [
+        []
+      ]
+    },
+    "Cron Send Questions": {
+      "main": [
+        [
+          {
+            "node": "Supabase Get Student",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function Check Answer": {
+      "main": [
+        [
+          {
+            "node": "Supabase Save Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Save Answer": {
+      "main": [
+        [
+          {
+            "node": "AI Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
